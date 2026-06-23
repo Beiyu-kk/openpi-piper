@@ -1,0 +1,6 @@
+numpy<2
+opencv-python>=4.10.0.84
+openpi-client
+pillow>=9.0.0
+piper_sdk
+tyro>=0.9.5
