@@ -5,13 +5,13 @@
 ## 1. 本次接入目标
 
 - 推理模型 checkpoint：
-  `/home/ubun/project/VLA/PiPER/openpi/openpi/checkpoints/pi05_piper_right_book_v5_lora/piper_right_book_v5_lora_bs96/10000`
+  `/mnt/c9dd2903-1a5c-4ec3-b146-9f8ee2434744/checkpoints/openpi/pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute/piper_right_book_noRGBD_joint_delta_gripper_absolute_bs32/5000`
 - 模型配置名：
-  `pi05_piper_right_book_v5_lora`
+  `pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute`
 - 控制端环境名：
   `piper-openpi`
 - Piper SDK 来源：
-  `/home/ubun/project/VLA/PiPER/ros2_ws/piper_sdk`
+  `/home/server/project/piper/openpi/piper_sdk`
 - 控制端代码位置：
   `examples/piper/main.py`
 
@@ -34,7 +34,7 @@ python -m pip install -e third_party/piper_sdk
 conda install -y pillow
 ```
 
-其中 `<openpi_repo>` 是当前 openpi 仓库根目录，也就是包含 `pyproject.toml`、`scripts/`、`examples/`、`packages/` 的目录。当前机器上对应为 `/home/ubun/project/VLA/PiPER/openpi/openpi`。
+其中 `<openpi_repo>` 是当前 openpi 仓库根目录，也就是包含 `pyproject.toml`、`scripts/`、`examples/`、`packages/` 的目录。当前机器上对应为 `/home/server/project/piper/openpi/openpi-piper`。
 
 当前验证到的关键包版本：
 
@@ -45,7 +45,7 @@ numpy          1.26.4
 opencv-python  4.13.0.92
 openpi-client  0.1.0  packages/openpi-client
 pillow         12.2.0
-piper_sdk      0.6.1  /home/ubun/project/VLA/PiPER/ros2_ws/piper_sdk
+piper_sdk      0.6.1  /home/server/project/piper/openpi/piper_sdk
 tyro           1.0.14
 websockets     16.0
 ```
@@ -57,7 +57,7 @@ websockets     16.0
 已在 openpi 的 `third_party` 下加入 Piper SDK：
 
 ```bash
-third_party/piper_sdk -> /home/ubun/project/VLA/PiPER/ros2_ws/piper_sdk
+third_party/piper_sdk -> /home/server/project/piper/openpi/piper_sdk
 ```
 
 这里使用符号链接，目的是让 openpi 直接使用本机正在维护的 Piper SDK，而不是复制整个 ROS2 workspace。安装时使用：
@@ -116,7 +116,7 @@ actions.shape == (15, 7)
 动作含义：
 
 - 前 6 维是模型输出的绝对关节目标，单位为弧度。
-- 第 7 维是夹爪连续目标位置，单位为米；策略输出链路不再做阈值化。
+- 第 7 维是夹爪连续目标位置，单位为米；部署控制端会按阈值转成开/合两档。
 - 旧配置 `pi05_piper_right_book_v5_lora` 训练时只对前 6 维关节使用 delta action，夹爪保持连续绝对值。
 - 新配置 `pi05_piper_right_book_v5_lora_all_delta` 训练时 7 维动作全部使用 delta action。
 - 两个配置的推理输出链路都会在发给控制端前转回绝对目标。
@@ -124,8 +124,8 @@ actions.shape == (15, 7)
 控制端发送 Piper SDK 前做如下转换：
 
 - 关节：`rad -> degree * 1000`，对应 `JointCtrl` 的 `0.001°` 单位。
-- 夹爪：连续米值先裁剪到 `[gripper_closed_mm, gripper_open_mm]` 对应的米制范围，再乘 `1_000_000`，对应 `GripperCtrl` 的 `0.001mm` 单位。
-- 默认 `gripper_closed_mm=0.0`，`gripper_open_mm=70.0`，即夹爪输出范围约为 `0.0m` 到 `0.07m`。
+- 夹爪：连续米值先按 `gripper_threshold_mm` 做阈值化，低于或等于阈值发送 `gripper_closed_mm`，高于阈值发送 `gripper_open_mm`，再转成 Piper SDK `GripperCtrl` 的 `0.001mm` 单位。
+- 默认 `gripper_closed_mm=0.0`，`gripper_open_mm=70.0`，`gripper_threshold_mm=35.0`。
 - 默认 `move_speed_percent=30`，避免初次部署动作过快。
 
 控制端也会将 6 个关节目标裁剪到 Piper SDK 文档给出的关节限制：
@@ -148,8 +148,8 @@ cd <openpi_repo>
 XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run --no-dev scripts/serve_policy.py \
   --port=8000 \
   policy:checkpoint \
-  --policy.config=pi05_piper_right_book_v5_lora \
-  --policy.dir=checkpoints/pi05_piper_right_book_v5_lora/piper_right_book_v5_lora_bs96/10000
+  --policy.config=pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute \
+  --policy.dir=/mnt/c9dd2903-1a5c-4ec3-b146-9f8ee2434744/checkpoints/openpi/pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute/piper_right_book_noRGBD_joint_delta_gripper_absolute_bs32/5000
 ```
 
 `XLA_PYTHON_CLIENT_MEM_FRACTION=0.95` 用于限制 JAX 预分配显存比例，避免服务端吃满整张显卡。
@@ -198,6 +198,7 @@ python examples/piper/main.py \
   --move-speed-percent=30 \
   --gripper-open-mm=70.0 \
   --gripper-closed-mm=0.0 \
+  --gripper-threshold-mm=35.0 \
   --no-dry-run \
   --enable-robot
 ```
@@ -262,4 +263,4 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --no-dev --with pytest --with pynvml pyt
 - `open-loop-horizon` 不能超过 15，因为该 checkpoint 的 `action_horizon=15`。
 - 初次真机建议保留 `--move-speed-percent=30`，稳定后再逐步调整。
 - 如果模型输出动作抖动，可以先降低 `--open-loop-horizon` 或 `--move-speed-percent`。
-- 夹爪输出不再做 `0/1` 阈值化；如果夹爪行程不合适，优先调整 `--gripper-open-mm` 和 `--gripper-closed-mm` 的裁剪范围。
+- 夹爪输出部署侧按 `--gripper-threshold-mm` 做阈值化；如果夹爪抓不稳，优先调整 `--gripper-closed-mm` 和 `--gripper-threshold-mm`。

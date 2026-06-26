@@ -14,6 +14,14 @@ def test_camera_preview_scale_defaults_to_larger_window():
     assert main.Args().camera_preview_scale == 1.5
 
 
+def test_default_checkpoint_targets_migrated_no_rgbd_checkpoint():
+    assert main.DEFAULT_CHECKPOINT == Path(
+        "/mnt/c9dd2903-1a5c-4ec3-b146-9f8ee2434744/checkpoints/openpi/"
+        "pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute/"
+        "piper_right_book_noRGBD_joint_delta_gripper_absolute_bs32/5000"
+    )
+
+
 def test_policy_action_horizon_is_read_from_flat_server_metadata():
     assert main.get_policy_action_horizon({"action_horizon": 30}) == 30
 
@@ -59,15 +67,40 @@ def test_joint_radians_to_sdk_units_converts_to_millidegrees():
     assert units == [0, 90_000, -90_000, 180_000, -180_000, 7047]
 
 
-def test_gripper_action_to_sdk_units_preserves_continuous_meter_actions():
-    assert main.gripper_action_to_sdk_units(0.0, open_mm=70.0, closed_mm=0.0) == 0
-    assert main.gripper_action_to_sdk_units(0.035, open_mm=70.0, closed_mm=0.0) == 35_000
-    assert main.gripper_action_to_sdk_units(0.07, open_mm=70.0, closed_mm=0.0) == 70_000
+def test_gripper_action_to_sdk_units_thresholds_to_closed_or_open_targets():
+    assert main.gripper_action_to_sdk_units(
+        0.0,
+        open_mm=70.0,
+        closed_mm=0.0,
+        threshold_mm=35.0,
+    ) == 0
+    assert main.gripper_action_to_sdk_units(
+        0.035,
+        open_mm=70.0,
+        closed_mm=0.0,
+        threshold_mm=35.0,
+    ) == 0
+    assert main.gripper_action_to_sdk_units(
+        0.036,
+        open_mm=70.0,
+        closed_mm=0.0,
+        threshold_mm=35.0,
+    ) == 70_000
 
 
-def test_gripper_action_to_sdk_units_clips_to_configured_mm_range():
-    assert main.gripper_action_to_sdk_units(-0.01, open_mm=70.0, closed_mm=3.0) == 3_000
-    assert main.gripper_action_to_sdk_units(0.09, open_mm=65.5, closed_mm=3.25) == 65_500
+def test_gripper_action_to_sdk_units_uses_configured_closed_and_open_targets():
+    assert main.gripper_action_to_sdk_units(
+        -0.01,
+        open_mm=70.0,
+        closed_mm=3.0,
+        threshold_mm=35.0,
+    ) == 3_000
+    assert main.gripper_action_to_sdk_units(
+        0.09,
+        open_mm=65.5,
+        closed_mm=3.25,
+        threshold_mm=35.0,
+    ) == 65_500
 
 
 def test_gripper_sdk_units_to_meters_matches_training_state_units():

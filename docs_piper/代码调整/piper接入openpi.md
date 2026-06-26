@@ -7,7 +7,7 @@
 数据集路径：
 
 ```bash
-/home/ubun/project/VLA/PiPER/Kai0/kai0/data/lerobot_v21/piper_right_book_V5
+/mnt/c9dd2903-1a5c-4ec3-b146-9f8ee2434744/Dataset/piper_data/data/lerobot_v21/piper_right_book_noRGBD
 ```
 
 已检查 `meta/info.json`、`meta/tasks.jsonl` 和 `meta/episodes.jsonl`：
@@ -178,7 +178,7 @@ src/openpi/policies/piper_policy_test.py
 工作目录：
 
 ```bash
-cd /home/ubun/project/VLA/PiPER/openpi/openpi
+cd /home/server/project/piper/openpi/openpi-piper
 ```
 
 推荐启动命令：
@@ -219,7 +219,7 @@ nohup uv run --no-dev scripts/train.py pi05_piper_right_book_v5_lora \
 默认 checkpoint 目录：
 
 ```bash
-checkpoints/pi05_piper_right_book_v5_lora/piper_right_book_v5_lora_bs96
+/mnt/c9dd2903-1a5c-4ec3-b146-9f8ee2434744/checkpoints/openpi/pi05_piper_right_book_v5_lora_joint_delta_gripper_absolute/piper_right_book_joint_delta_gripper_absolute_bs32
 ```
 
 每 5000 step 保存一次 checkpoint，训练总步数 30000。

@@ -34,6 +34,10 @@ ModelType: TypeAlias = _model.ModelType
 # Work around a tyro issue with using nnx.filterlib.Filter directly.
 Filter: TypeAlias = nnx.filterlib.Filter
 
+PIPER_DATA_ROOT = "/mnt/c9dd2903-1a5c-4ec3-b146-9f8ee2434744/Dataset/piper_data/data"
+PIPER_CHECKPOINT_ROOT = "/mnt/c9dd2903-1a5c-4ec3-b146-9f8ee2434744/checkpoints/openpi"
+PIPER_LEROBOT_NO_RGBD_DATASET = f"{PIPER_DATA_ROOT}/lerobot_v21/piper_right_book_noRGBD"
+
 
 @dataclasses.dataclass(frozen=True)
 class AssetsConfig:
@@ -554,7 +558,7 @@ class TrainConfig:
     # Base directory for config assets (e.g., norm stats).
     assets_base_dir: str = "./assets"
     # Base directory for checkpoints.
-    checkpoint_base_dir: str = "./checkpoints"
+    checkpoint_base_dir: str = PIPER_CHECKPOINT_ROOT
 
     # Random seed that will be used by random generators during training.
     seed: int = 42
@@ -927,7 +931,7 @@ _CONFIGS = [
         data=RLDSDroidDataConfig(
             repo_id="droid",
             # Set this to the path to your DROID RLDS dataset (the parent directory of the `droid` directory).
-            rlds_data_dir="/mnt/pi-data/kevin",
+            rlds_data_dir="<path_to_droid_rlds_dataset>",
             action_space=droid_rlds_dataset.DroidActionSpace.JOINT_POSITION,
             assets=AssetsConfig(
                 assets_dir="gs://openpi-assets/checkpoints/pi05_base/assets/",
@@ -985,7 +989,7 @@ _CONFIGS = [
             action_expert_variant="gemma_300m_lora",
         ),
         data=LeRobotPiperDataConfig(
-            repo_id="/home/ubun/project/VLA/PiPER/Kai0/kai0/data/lerobot_v21/piper_right_book_V5",
+            repo_id=PIPER_LEROBOT_NO_RGBD_DATASET,
             base_config=DataConfig(prompt_from_task=True),
             assets=AssetsConfig(asset_id="piper_right_book_v5"),
             binarize_gripper_outputs=False,
@@ -1016,7 +1020,7 @@ _CONFIGS = [
             action_expert_variant="gemma_300m_lora",
         ),
         data=LeRobotPiperDataConfig(
-            repo_id="/home/ubun/project/VLA/PiPER/Kai0/kai0/data/lerobot_v21/piper_right_book_V5",
+            repo_id=PIPER_LEROBOT_NO_RGBD_DATASET,
             base_config=DataConfig(prompt_from_task=True),
             assets=AssetsConfig(asset_id="piper_right_book_v5_all_delta"),
             binarize_gripper_outputs=False,
@@ -1047,7 +1051,7 @@ _CONFIGS = [
             action_expert_variant="gemma_300m_lora",
         ),
         data=LeRobotPiperDataConfig(
-            repo_id="/home/ubun/project/Dataset/piper_lerobot_book/piper_right_book_grasp_only_100/",
+            repo_id=PIPER_LEROBOT_NO_RGBD_DATASET,
             base_config=DataConfig(prompt_from_task=True, action_delta_timestamps_start=1),
             assets=AssetsConfig(asset_id="piper_right_book_v5_joint_delta_gripper_absolute"),
             binarize_gripper_outputs=False,
@@ -1078,7 +1082,7 @@ _CONFIGS = [
             action_expert_variant="gemma_300m_lora",
         ),
         data=LeRobotPiperDataConfig(
-            repo_id="/home/ubun/project/VLA/PiPER/openpi/data/lerobot_v21/piper_right_book_noRGBD",
+            repo_id=PIPER_LEROBOT_NO_RGBD_DATASET,
             base_config=DataConfig(prompt_from_task=True, action_delta_timestamps_start=1),
             assets=AssetsConfig(asset_id="piper_right_book_noRGBD_joint_delta_gripper_absolute"),
             binarize_gripper_outputs=False,
@@ -1132,7 +1136,7 @@ _CONFIGS = [
         data=FakeDataConfig(),
         batch_size=2,
         model=pi0_config.Pi0Config(paligemma_variant="dummy", action_expert_variant="dummy"),
-        weight_loader=weight_loaders.CheckpointWeightLoader("./checkpoints/debug/debug/9/params"),
+        weight_loader=weight_loaders.CheckpointWeightLoader(f"{PIPER_CHECKPOINT_ROOT}/debug/debug/9/params"),
         overwrite=True,
         exp_name="debug",
         num_train_steps=10,

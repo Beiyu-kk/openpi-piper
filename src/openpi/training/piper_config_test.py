@@ -62,7 +62,8 @@ def test_piper_no_rgbd_train_config_uses_new_dataset_and_keeps_gripper_absolute(
 
     delta_mask, absolute_mask = _piper_delta_and_absolute_masks(data_config)
 
-    assert config.data.repo_id == "/home/ubun/project/VLA/PiPER/openpi/data/lerobot_v21/piper_right_book_noRGBD"
+    assert config.data.repo_id == training_config.PIPER_LEROBOT_NO_RGBD_DATASET
+    assert config.checkpoint_base_dir == training_config.PIPER_CHECKPOINT_ROOT
     assert data_config.asset_id == "piper_right_book_noRGBD_joint_delta_gripper_absolute"
     assert delta_mask == transforms.make_bool_mask(6, -1)
     assert absolute_mask == transforms.make_bool_mask(6, -1)

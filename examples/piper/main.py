@@ -18,8 +18,9 @@ import tyro
 logger = logging.getLogger(__name__)
 
 DEFAULT_CHECKPOINT = Path(
-    "/home/ubun/project/VLA/PiPER/openpi/openpi/checkpoints/"
-    "pi05_piper_right_book_v5_lora/piper_right_book_v5_lora_bs96/10000"
+    "/mnt/c9dd2903-1a5c-4ec3-b146-9f8ee2434744/checkpoints/openpi/"
+    "pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute/"
+    "piper_right_book_noRGBD_joint_delta_gripper_absolute_bs32/5000"
 )
 PIPER_CONTROL_FREQUENCY = 15.0
 JOINT_LIMITS_RAD = np.array(
@@ -63,6 +64,7 @@ class Args:
     move_speed_percent: int = 30
     gripper_open_mm: float = 70.0
     gripper_closed_mm: float = 0.0
+    gripper_threshold_mm: float = 35.0
     gripper_effort: int = 1000
     gripper_hold_close: bool = False
     gripper_close_trigger_mm: float = 25.0
@@ -95,12 +97,11 @@ def gripper_action_to_sdk_units(
     *,
     open_mm: float,
     closed_mm: float,
+    threshold_mm: float,
 ) -> int:
-    """Convert a continuous model gripper action in meters to Piper SDK 0.001 mm units."""
-    min_m = min(open_mm, closed_mm) * 1e-3
-    max_m = max(open_mm, closed_mm) * 1e-3
-    target_m = float(np.clip(float(gripper_action), min_m, max_m))
-    return int(round(target_m * 1_000_000.0))
+    """Threshold a model gripper action and convert it to Piper SDK 0.001 mm units."""
+    target_mm = closed_mm if float(gripper_action) * 1000.0 <= threshold_mm else open_mm
+    return int(round(float(target_mm) * 1000.0))
 
 
 def gripper_sdk_units_to_meters(gripper_sdk: int | float) -> float:
@@ -362,12 +363,14 @@ class PiperArm:
         move_speed_percent: int,
         gripper_open_mm: float,
         gripper_closed_mm: float,
+        gripper_threshold_mm: float,
         gripper_effort: int,
     ) -> None:
         self._dry_run = dry_run
         self._move_speed_percent = move_speed_percent
         self._gripper_open_mm = gripper_open_mm
         self._gripper_closed_mm = gripper_closed_mm
+        self._gripper_threshold_mm = gripper_threshold_mm
         self._gripper_effort = gripper_effort
         self._piper = None
 
@@ -411,6 +414,7 @@ class PiperArm:
             float(action[-1]),
             open_mm=self._gripper_open_mm,
             closed_mm=self._gripper_closed_mm,
+            threshold_mm=self._gripper_threshold_mm,
         )
         joints_sdk = joint_radians_to_sdk_units(joints_rad)
         if self._dry_run:
@@ -433,6 +437,10 @@ def run(args: Args) -> None:
         raise ValueError("Use either dry_run=True or enable_robot=True; both together are ambiguous.")
     if args.gripper_hold_close and args.gripper_release_trigger_mm <= args.gripper_close_trigger_mm:
         raise ValueError("gripper_release_trigger_mm must be greater than gripper_close_trigger_mm.")
+    if not min(args.gripper_open_mm, args.gripper_closed_mm) <= args.gripper_threshold_mm <= max(
+        args.gripper_open_mm, args.gripper_closed_mm
+    ):
+        raise ValueError("gripper_threshold_mm must be between gripper_closed_mm and gripper_open_mm.")
 
     logger.info("Expected checkpoint: %s", args.checkpoint)
     policy_client = websocket_client_policy.WebsocketClientPolicy(args.host, args.port, api_key=args.api_key)
@@ -482,6 +490,7 @@ def run(args: Args) -> None:
         move_speed_percent=args.move_speed_percent,
         gripper_open_mm=args.gripper_open_mm,
         gripper_closed_mm=args.gripper_closed_mm,
+        gripper_threshold_mm=args.gripper_threshold_mm,
         gripper_effort=args.gripper_effort,
     )
 
