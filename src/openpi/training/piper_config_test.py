@@ -1,3 +1,5 @@
+import dataclasses
+
 from openpi import transforms
 from openpi.models import pi0_config
 from openpi.training import config as training_config
@@ -38,3 +40,30 @@ def test_piper_all_delta_config_uses_delta_actions_for_all_seven_action_dims(tmp
 
     assert delta_mask == transforms.make_bool_mask(7)
     assert absolute_mask == transforms.make_bool_mask(7)
+
+
+def test_piper_joint_delta_gripper_absolute_train_config_keeps_gripper_absolute(tmp_path):
+    config = training_config.get_config("pi05_piper_right_book_v5_lora_joint_delta_gripper_absolute")
+    config = dataclasses.replace(config, assets_base_dir=str(tmp_path))
+    data_config = config.data.create(config.assets_dirs, config.model)
+
+    delta_mask, absolute_mask = _piper_delta_and_absolute_masks(data_config)
+
+    assert data_config.asset_id == "piper_right_book_v5_joint_delta_gripper_absolute"
+    assert delta_mask == transforms.make_bool_mask(6, -1)
+    assert absolute_mask == transforms.make_bool_mask(6, -1)
+    assert data_config.action_delta_timestamps_start == 1
+
+
+def test_piper_no_rgbd_train_config_uses_new_dataset_and_keeps_gripper_absolute(tmp_path):
+    config = training_config.get_config("pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute")
+    config = dataclasses.replace(config, assets_base_dir=str(tmp_path))
+    data_config = config.data.create(config.assets_dirs, config.model)
+
+    delta_mask, absolute_mask = _piper_delta_and_absolute_masks(data_config)
+
+    assert config.data.repo_id == "/home/ubun/project/VLA/PiPER/openpi/data/lerobot_v21/piper_right_book_noRGBD"
+    assert data_config.asset_id == "piper_right_book_noRGBD_joint_delta_gripper_absolute"
+    assert delta_mask == transforms.make_bool_mask(6, -1)
+    assert absolute_mask == transforms.make_bool_mask(6, -1)
+    assert data_config.action_delta_timestamps_start == 1

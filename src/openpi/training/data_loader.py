@@ -141,7 +141,14 @@ def create_torch_dataset(
     dataset = lerobot_dataset.LeRobotDataset(
         data_config.repo_id,
         delta_timestamps={
-            key: [t / dataset_meta.fps for t in range(action_horizon)] for key in data_config.action_sequence_keys
+            key: [
+                t / dataset_meta.fps
+                for t in range(
+                    data_config.action_delta_timestamps_start,
+                    data_config.action_delta_timestamps_start + action_horizon,
+                )
+            ]
+            for key in data_config.action_sequence_keys
         },
         video_backend=data_config.video_backend,
     )

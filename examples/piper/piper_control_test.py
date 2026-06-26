@@ -14,6 +14,43 @@ def test_camera_preview_scale_defaults_to_larger_window():
     assert main.Args().camera_preview_scale == 1.5
 
 
+def test_policy_action_horizon_is_read_from_flat_server_metadata():
+    assert main.get_policy_action_horizon({"action_horizon": 30}) == 30
+
+
+def test_policy_action_horizon_is_read_from_nested_server_metadata():
+    metadata = {"model": {"action_horizon": 15}}
+
+    assert main.get_policy_action_horizon(metadata) == 15
+
+
+def test_policy_action_horizon_is_unknown_when_metadata_does_not_include_it():
+    assert main.get_policy_action_horizon({"reset_pose": [0.0]}) is None
+
+
+def test_validate_action_chunk_accepts_metadata_horizon():
+    chunk = np.zeros((30, 7), dtype=np.float32)
+
+    validated = main.validate_action_chunk(chunk, expected_action_horizon=30)
+
+    assert validated is chunk
+
+
+def test_validate_action_chunk_accepts_unknown_horizon_from_returned_shape():
+    chunk = np.zeros((15, 7), dtype=np.float32)
+
+    validated = main.validate_action_chunk(chunk, expected_action_horizon=None)
+
+    assert validated is chunk
+
+
+def test_validate_action_chunk_rejects_chunk_that_differs_from_metadata_horizon():
+    chunk = np.zeros((15, 7), dtype=np.float32)
+
+    with pytest.raises(RuntimeError, match=r"Expected action chunk shape \(30, 7\), got \(15, 7\)"):
+        main.validate_action_chunk(chunk, expected_action_horizon=30)
+
+
 def test_joint_radians_to_sdk_units_converts_to_millidegrees():
     joints = np.array([0.0, math.pi / 2, -math.pi / 2, math.pi, -math.pi, 0.123], dtype=np.float32)
 

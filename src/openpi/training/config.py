@@ -87,6 +87,10 @@ class DataConfig:
     # sequence is defined by the `action_horizon` field in the model config. This should be adjusted if your
     # LeRobot dataset is using different keys to represent the action.
     action_sequence_keys: Sequence[str] = ("actions",)
+    # First future frame offset used for action chunks. The default keeps the current openpi behavior:
+    # actions are sampled at t, t+1, ... . Set to 1 when the dataset stores action_t == state_t and the
+    # policy should learn to predict future state/action targets from state_t.
+    action_delta_timestamps_start: int = 0
 
     # If true, will use the LeRobot dataset task to define the prompt.
     prompt_from_task: bool = False
@@ -1023,6 +1027,68 @@ _CONFIGS = [
             pi05=True,
             action_dim=32,
             action_horizon=15,
+            paligemma_variant="gemma_2b_lora",
+            action_expert_variant="gemma_300m_lora",
+        ).get_freeze_filter(),
+        ema_decay=None,
+        num_train_steps=30_000,
+        save_interval=5_000,
+        keep_period=5_000,
+        batch_size=32,
+        num_workers=4,
+    ),
+    TrainConfig(
+        name="pi05_piper_right_book_v5_lora_joint_delta_gripper_absolute",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,
+            action_horizon=30,
+            paligemma_variant="gemma_2b_lora",
+            action_expert_variant="gemma_300m_lora",
+        ),
+        data=LeRobotPiperDataConfig(
+            repo_id="/home/ubun/project/Dataset/piper_lerobot_book/piper_right_book_grasp_only_100/",
+            base_config=DataConfig(prompt_from_task=True, action_delta_timestamps_start=1),
+            assets=AssetsConfig(asset_id="piper_right_book_v5_joint_delta_gripper_absolute"),
+            binarize_gripper_outputs=False,
+            delta_gripper_action=False,
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        freeze_filter=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,
+            action_horizon=30,
+            paligemma_variant="gemma_2b_lora",
+            action_expert_variant="gemma_300m_lora",
+        ).get_freeze_filter(),
+        ema_decay=None,
+        num_train_steps=30_000,
+        save_interval=5_000,
+        keep_period=5_000,
+        batch_size=32,
+        num_workers=4,
+    ),
+    TrainConfig(
+        name="pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,
+            action_horizon=30,
+            paligemma_variant="gemma_2b_lora",
+            action_expert_variant="gemma_300m_lora",
+        ),
+        data=LeRobotPiperDataConfig(
+            repo_id="/home/ubun/project/VLA/PiPER/openpi/data/lerobot_v21/piper_right_book_noRGBD",
+            base_config=DataConfig(prompt_from_task=True, action_delta_timestamps_start=1),
+            assets=AssetsConfig(asset_id="piper_right_book_noRGBD_joint_delta_gripper_absolute"),
+            binarize_gripper_outputs=False,
+            delta_gripper_action=False,
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        freeze_filter=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,
+            action_horizon=30,
             paligemma_variant="gemma_2b_lora",
             action_expert_variant="gemma_300m_lora",
         ).get_freeze_filter(),

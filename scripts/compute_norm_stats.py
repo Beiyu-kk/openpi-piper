@@ -112,6 +112,12 @@ def main(config_name: str, max_frames: int | None = None):
     print(f"Writing stats to: {output_path}")
     normalize.save(output_path, norm_stats)
 
+    if data_config.asset_id is not None:
+        asset_output_path = config.assets_dirs / data_config.asset_id
+        if asset_output_path != output_path:
+            print(f"Writing stats to asset path: {asset_output_path}")
+            normalize.save(asset_output_path, norm_stats)
+
 
 if __name__ == "__main__":
     tyro.cli(main)

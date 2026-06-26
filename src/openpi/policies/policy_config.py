@@ -13,6 +13,14 @@ from openpi.training import config as _config
 import openpi.transforms as transforms
 
 
+def _make_policy_metadata(train_config: _config.TrainConfig) -> dict[str, Any]:
+    metadata = dict(train_config.policy_metadata or {})
+    metadata.setdefault("config_name", train_config.name)
+    metadata.setdefault("action_dim", train_config.model.action_dim)
+    metadata.setdefault("action_horizon", train_config.model.action_horizon)
+    return metadata
+
+
 def create_trained_policy(
     train_config: _config.TrainConfig,
     checkpoint_dir: pathlib.Path | str,
@@ -72,6 +80,8 @@ def create_trained_policy(
         except ImportError:
             pytorch_device = "cpu"
 
+    metadata = _make_policy_metadata(train_config)
+
     return _policy.Policy(
         model,
         transforms=[
@@ -88,7 +98,7 @@ def create_trained_policy(
             *repack_transforms.outputs,
         ],
         sample_kwargs=sample_kwargs,
-        metadata=train_config.policy_metadata,
+        metadata=metadata,
         is_pytorch=is_pytorch,
         pytorch_device=pytorch_device if is_pytorch else None,
     )

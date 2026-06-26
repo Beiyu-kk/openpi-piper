@@ -108,6 +108,32 @@ def gripper_sdk_units_to_meters(gripper_sdk: int | float) -> float:
     return float(gripper_sdk) * 1e-6
 
 
+def get_policy_action_horizon(metadata: dict[str, Any]) -> int | None:
+    """Read the policy action horizon from server metadata when available."""
+    for container in (metadata, metadata.get("model") if isinstance(metadata.get("model"), dict) else None):
+        if not container:
+            continue
+        value = container.get("action_horizon")
+        if value is None:
+            continue
+        horizon = int(value)
+        if horizon < 1:
+            raise ValueError(f"Invalid policy action_horizon {horizon}; expected >= 1.")
+        return horizon
+    return None
+
+
+def validate_action_chunk(actions: np.ndarray, *, expected_action_horizon: int | None) -> np.ndarray:
+    """Validate a Piper action chunk while supporting different policy horizons."""
+    if actions.ndim != 2 or actions.shape[1] != 7:
+        raise RuntimeError(f"Expected action chunk shape (N, 7), got {actions.shape}.")
+    if actions.shape[0] < 1:
+        raise RuntimeError("Expected action chunk to contain at least one action.")
+    if expected_action_horizon is not None and actions.shape[0] != expected_action_horizon:
+        raise RuntimeError(f"Expected action chunk shape ({expected_action_horizon}, 7), got {actions.shape}.")
+    return actions
+
+
 @dataclasses.dataclass
 class GripperHoldClose:
     """Latch the gripper closed once the policy starts closing it."""
@@ -403,8 +429,6 @@ class PiperArm:
 def run(args: Args) -> None:
     if args.open_loop_horizon < 1:
         raise ValueError("open_loop_horizon must be >= 1.")
-    if args.open_loop_horizon > 15:
-        raise ValueError("The Piper policy action_horizon is 15, so open_loop_horizon must be <= 15.")
     if args.dry_run and args.enable_robot:
         raise ValueError("Use either dry_run=True or enable_robot=True; both together are ambiguous.")
     if args.gripper_hold_close and args.gripper_release_trigger_mm <= args.gripper_close_trigger_mm:
@@ -412,7 +436,17 @@ def run(args: Args) -> None:
 
     logger.info("Expected checkpoint: %s", args.checkpoint)
     policy_client = websocket_client_policy.WebsocketClientPolicy(args.host, args.port, api_key=args.api_key)
-    logger.info("Server metadata: %s", policy_client.get_server_metadata())
+    server_metadata = policy_client.get_server_metadata()
+    logger.info("Server metadata: %s", server_metadata)
+    policy_action_horizon = get_policy_action_horizon(server_metadata)
+    if policy_action_horizon is not None:
+        logger.info("Using policy action_horizon=%d from server metadata.", policy_action_horizon)
+        if args.open_loop_horizon > policy_action_horizon:
+            raise ValueError(
+                f"open_loop_horizon={args.open_loop_horizon} exceeds policy action_horizon={policy_action_horizon}."
+            )
+    else:
+        logger.warning("Server metadata does not include action_horizon; will infer it from returned action chunks.")
 
     head_camera = make_camera(
         backend=args.camera_backend,
@@ -482,10 +516,19 @@ def run(args: Args) -> None:
                 actions_from_chunk_completed = 0
                 with prevent_keyboard_interrupt():
                     response = policy_client.infer(request_data)
-                pred_action_chunk = np.asarray(response["actions"], dtype=np.float32)
-                if pred_action_chunk.shape != (15, 7):
-                    raise RuntimeError(f"Expected action chunk shape (15, 7), got {pred_action_chunk.shape}.")
-                logger.info("Received new action chunk at step %d.", step)
+                pred_action_chunk = validate_action_chunk(
+                    np.asarray(response["actions"], dtype=np.float32),
+                    expected_action_horizon=policy_action_horizon,
+                )
+                if args.open_loop_horizon > pred_action_chunk.shape[0]:
+                    raise ValueError(
+                        f"open_loop_horizon={args.open_loop_horizon} exceeds returned action chunk length "
+                        f"{pred_action_chunk.shape[0]}."
+                    )
+                if policy_action_horizon is None:
+                    policy_action_horizon = int(pred_action_chunk.shape[0])
+                    logger.info("Inferred policy action_horizon=%d from returned action chunk.", policy_action_horizon)
+                logger.info("Received new action chunk at step %d with shape %s.", step, pred_action_chunk.shape)
 
             action = pred_action_chunk[actions_from_chunk_completed]
             actions_from_chunk_completed += 1

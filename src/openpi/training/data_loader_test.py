@@ -62,6 +62,35 @@ def test_with_fake_dataset():
         assert actions.shape == (config.batch_size, config.model.action_horizon, config.model.action_dim)
 
 
+def test_lerobot_action_delta_timestamps_can_start_from_future_frame(monkeypatch):
+    captured = {}
+
+    class FakeMetadata:
+        fps = 30
+        tasks = {}
+
+    class FakeLeRobotDataset:
+        def __init__(self, repo_id, *, delta_timestamps, video_backend=None):
+            captured["repo_id"] = repo_id
+            captured["delta_timestamps"] = delta_timestamps
+            captured["video_backend"] = video_backend
+
+    monkeypatch.setattr(_data_loader.lerobot_dataset, "LeRobotDatasetMetadata", lambda repo_id: FakeMetadata())
+    monkeypatch.setattr(_data_loader.lerobot_dataset, "LeRobotDataset", FakeLeRobotDataset)
+
+    data_config = _config.DataConfig(
+        repo_id="/tmp/piper",
+        action_sequence_keys=("action",),
+        action_delta_timestamps_start=1,
+        video_backend="pyav",
+    )
+    _data_loader.create_torch_dataset(data_config, action_horizon=3, model_config=pi0_config.Pi0Config())
+
+    assert captured["repo_id"] == "/tmp/piper"
+    assert captured["delta_timestamps"] == {"action": [1 / 30, 2 / 30, 3 / 30]}
+    assert captured["video_backend"] == "pyav"
+
+
 def test_with_real_dataset():
     config = _config.get_config("pi0_aloha_sim")
     config = dataclasses.replace(config, batch_size=4)

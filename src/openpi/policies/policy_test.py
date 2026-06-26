@@ -6,6 +6,16 @@ from openpi.policies import policy_config as _policy_config
 from openpi.training import config as _config
 
 
+def test_policy_metadata_includes_train_config_action_shape():
+    config = _config.get_config("pi05_piper_right_book_v5_lora_joint_delta_gripper_absolute")
+
+    metadata = _policy_config._make_policy_metadata(config)
+
+    assert metadata["config_name"] == "pi05_piper_right_book_v5_lora_joint_delta_gripper_absolute"
+    assert metadata["action_dim"] == 32
+    assert metadata["action_horizon"] == 30
+
+
 @pytest.mark.manual
 def test_infer():
     config = _config.get_config("pi0_aloha_sim")

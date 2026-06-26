@@ -2,7 +2,23 @@
 
 本文件只写启动推理需要执行的命令。当前 Piper 微调模型使用 openpi 的 `pi05` 配置启动，属于 pi0 系列推理服务。
 
+## 0. 动作块长度自动适配
+
+现在 `examples/piper/main.py` 不再写死动作块长度为 15。
+
+启动 `scripts/serve_policy.py` 时，服务端会根据 `--policy.config` 对应的训练配置自动把 `action_horizon` 写入 server metadata；控制端连接后会读取这个值，并按模型自己的动作块长度接收动作：
+
+- `pi05_piper_right_book_v5_lora`：`action_horizon=15`
+- `pi05_piper_right_book_v5_lora_all_delta`：`action_horizon=15`
+- `pi05_piper_right_book_v5_lora_joint_delta_gripper_absolute`：`action_horizon=30`
+
+所以控制端命令里不需要额外传模型动作块大小。只要服务端的 `--policy.config` 和 `--policy.dir` 对应正确 checkpoint，控制端会自动适配 15 或 30 的返回动作块。
+
+注意：`--open-loop-horizon` 不是模型动作块长度，而是每次收到动作块后连续执行多少步再重新请求模型。它必须小于等于模型的 `action_horizon`。例如 30 步动作块的模型可以设置 `--open-loop-horizon=15`，表示每次只执行前 15 步后重新推理。
+
 ## 1.1 启动模型推理服务 piper_right_book_v5_lora_bs96
+
+该配置是前六维关节相对动作 + 第七维夹爪绝对位置，但是norm stats计算使用的是绝对，存在action=state的问题
 
 打开第一个终端：
 
@@ -30,6 +46,8 @@ XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run --no-dev scripts/serve_policy.py \
 
 ## 1.2 启动模型推理服务 pi05_piper_right_book_v5_lora_all_delta
 
+该配置是前六维关节相对位置 + 第七维夹爪绝对位置，norm stats计算使用的是相对位置，但是存在action=state的问题
+
 ```bash
 cd <openpi_repo>
 source .venv/bin/activate
@@ -41,9 +59,26 @@ XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run --no-dev scripts/serve_policy.py \
   --policy.dir=checkpoints/pi05_piper_right_book_v5_lora_all_delta/piper_right_book_v5_lora_all_delta_bs32/10000
 ```
 
+## 1.3 启动模型推理服务 pi05_piper_right_book_v5_lora_joint_delta_gripper_absolute
+
+该配置是前六维关节相对位置 + 第七维夹爪绝对位置，norm stats计算使用的是相对位置，并通过 `action_delta_timestamps_start=1` 避开 `action_t == state_t` 的首帧问题。该模型的 `action_horizon=30`，控制端会从服务端 metadata 自动识别，不需要额外传动作块大小。
+
+```bash
+cd <openpi_repo>
+source .venv/bin/activate
+
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run --no-dev scripts/serve_policy.py \
+  --port=8000 \
+  policy:checkpoint \
+  --policy.config=pi05_piper_right_book_v5_lora_joint_delta_gripper_absolute \
+  --policy.dir=checkpoints/pi05_piper_right_book_v5_lora_joint_delta_gripper_absolute/piper_right_book_joint_delta_gripper_absolute_bs32/10000
+```
+
 ## 2. 真机启动
 
 确认相机序列号、`can_right`、机械臂工作空间、急停和夹爪开合方向都正确后，再执行真机命令：
+
+正常启动
 
 ```bash
 cd <openpi_repo>
@@ -60,7 +95,45 @@ python examples/piper/main.py \
   --camera-preview-window="Piper cameras" \
   --camera-preview-scale=1.2 \
   --can-name=can_right \
-  --open-loop-horizon=12 \
+  --open-loop-horizon=15 \
+  --control-hz=15 \
+  --move-speed-percent=30 \
+  --gripper-open-mm=70.0 \
+  --gripper-closed-mm=0.0 \
+  --no-dry-run \
+  --enable-robot
+```
+
+特殊化处理夹爪启动
+
+如果模型输出夹爪目标 <= 25mm：
+    进入“闭合保持”状态
+    后续夹爪目标强制压到 0mm
+
+在闭合保持状态下：
+    只要模型输出夹爪目标 < 45mm
+    就继续保持 0mm 闭合
+
+只有当模型输出夹爪目标 >= 45mm：
+    才退出闭合保持状态
+    恢复按模型输出控制夹爪
+    
+```bash
+cd <openpi_repo>
+conda activate piper-openpi
+
+python examples/piper/main.py \
+  --host=127.0.0.1 \
+  --port=8000 \
+  --prompt="抓起书本放到另外一个格子里" \
+  --camera-backend=realsense \
+  --head-camera-serial=339322074804 \
+  --wrist-camera-serial=346522074547 \
+  --show-cameras \
+  --camera-preview-window="Piper cameras" \
+  --camera-preview-scale=1.2 \
+  --can-name=can_right \
+  --open-loop-horizon=15 \
   --control-hz=15 \
   --move-speed-percent=30 \
   --gripper-open-mm=70.0 \
