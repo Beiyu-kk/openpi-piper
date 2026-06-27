@@ -5,7 +5,7 @@
 ## 1. 本次接入目标
 
 - 推理模型 checkpoint：
-  `/mnt/c9dd2903-1a5c-4ec3-b146-9f8ee2434744/checkpoints/openpi/pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute/piper_right_book_noRGBD_joint_delta_gripper_absolute_bs32/5000`
+  `/mnt/disk/checkpoints/openpi/pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute/piper_right_book_noRGBD_joint_delta_gripper_absolute_bs32/5000`
 - 模型配置名：
   `pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute`
 - 控制端环境名：
@@ -29,10 +29,12 @@ conda create -y -n piper-openpi python=3.10
 cd <openpi_repo>
 conda activate piper-openpi
 python -m pip install --no-deps -e packages/openpi-client
-python -m pip install tyro dm-tree msgpack websockets opencv-python
+python -m pip install -r examples/piper/requirements.txt
 python -m pip install -e third_party/piper_sdk
 conda install -y pillow
 ```
+
+`examples/piper/requirements.txt` 固定了 `numpy==1.26.4` 和 `opencv-python==4.10.0.84`。不要单独安装最新版 `opencv-python`，否则可能把 `numpy` 升到 2.x，导致 `openpi-client` 的 `numpy<2.0.0` 依赖冲突。
 
 其中 `<openpi_repo>` 是当前 openpi 仓库根目录，也就是包含 `pyproject.toml`、`scripts/`、`examples/`、`packages/` 的目录。当前机器上对应为 `/home/server/project/piper/openpi/openpi-piper`。
 

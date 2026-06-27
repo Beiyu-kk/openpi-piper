@@ -48,14 +48,24 @@ XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run --no-dev scripts/serve_policy.py \
   --port=8000 \
   policy:checkpoint \
   --policy.config=pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute \
-  --policy.dir=/mnt/c9dd2903-1a5c-4ec3-b146-9f8ee2434744/checkpoints/openpi/pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute/piper_right_book_noRGBD_joint_delta_gripper_absolute_bs32/5000
+  --policy.dir=/mnt/disk/checkpoints/openpi/pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute/piper_right_book_noRGBD_joint_delta_gripper_absolute_bs32/5000
 ```
 
 ## 2. 真机启动
 
-确认相机序列号、`can_right`、机械臂工作空间、急停和夹爪开合方向都正确后，再执行真机命令：
+控制端使用 `piper-openpi` conda 环境启动，只负责相机读取、websocket 请求策略服务、CAN 下发动作和夹爪部署侧处理。模型推理服务仍使用第 1 节的 openpi `uv` 环境启动。
 
-正常启动
+真机启动前先确认：
+
+- 第 1 节的 policy server 已在 `127.0.0.1:8000` 正常运行。
+- RealSense 主视角相机序列号为 `339322074804`，右腕相机序列号为 `346522074547`。
+- 当前右臂 CAN 口为 `can_right`，并且 CAN 已启动。
+- 机械臂工作空间、急停、夹爪开合方向都已确认。
+- 第一次调试建议先不要加 `--no-dry-run --enable-robot`，确认相机画面、策略服务连接和动作日志正常后再真机执行。
+
+注意：`examples/piper/main.py` 和 `examples/piper/main_rtc.py` 都使用 tyro 解析参数，布尔参数不要写成 `=True` 或 `=False`。启用某个开关直接写 `--show-cameras`、`--gripper-hold-close`、`--enable-robot`；关闭默认开启的 dry-run 写 `--no-dry-run`。
+
+### 2.1 普通 open-loop 启动
 
 ```bash
 cd <openpi_repo>
@@ -82,19 +92,15 @@ python examples/piper/main.py \
   --enable-robot
 ```
 
-特殊化处理夹爪启动
+其中 `--open-loop-horizon=15` 表示每次从服务端拿到 action chunk 后，只连续执行前 15 步，然后重新请求一次模型。当前推荐模型的 `action_horizon=30`，所以该值必须小于等于 30。
 
-如果模型输出夹爪目标 <= 25mm：
-    进入“闭合保持”状态
-    后续夹爪目标强制压到 0mm
+### 2.2 夹爪阈值化启动推理
 
-在闭合保持状态下：
-    只要模型输出夹爪目标 < 45mm
-    就继续保持 0mm 闭合
+夹爪闭合保持用于避免模型短暂输出偏大导致夹爪松开：
 
-只有当模型输出夹爪目标 >= 45mm：
-    才退出闭合保持状态
-    恢复按模型输出控制夹爪
+- 当模型输出夹爪目标小于等于 `--gripper-close-trigger-mm=25.0` 时，进入闭合保持状态。
+- 闭合保持状态下，夹爪目标强制压到 `--gripper-hold-mm=0.0`。
+- 只有当模型输出夹爪目标大于等于 `--gripper-release-trigger-mm=45.0` 时，才退出闭合保持状态。
     
 ```bash
 cd <openpi_repo>
@@ -125,7 +131,54 @@ python examples/piper/main.py \
   --enable-robot
 ```
 
-注意：`examples/piper/main.py` 使用 tyro 解析参数，布尔参数不要写成 `=True` 或 `=False`。启用某个开关直接写 `--gripper-hold-close`、`--enable-robot`，关闭默认开启的 dry-run 写 `--no-dry-run`。
+夹爪阈值化可以和 RTC 同时使用：在 2.3 的 `main_rtc.py` 启动命令中额外加入 `--gripper-hold-close`、`--gripper-close-trigger-mm`、`--gripper-release-trigger-mm` 和 `--gripper-hold-mm` 即可。
+
+### 2.3 RTC 推理执行启动
+
+RTC 使用单独脚本 `examples/piper/main_rtc.py`，不要在普通 `main.py` 上加 RTC 参数。
+
+当前实现参考 `real-time-chunking-kinetix` 的实时执行语义，但仍属于客户端侧 RTC 执行调度，不改变 openpi 模型采样本身。它和普通 open-loop 的核心区别是：
+
+- 后台线程异步请求下一段 action chunk。
+- 请求期间机器人不暂停，继续按当前 chunk 执行动作。
+- 新 chunk 返回后，脚本统计这段时间里实际已经执行了多少个动作。
+- 这个实际执行步数就是动态 `inference_delay`。
+- 然后从 `new_chunk[delay_steps]` 开始接入新动作。
+
+因此 RTC 脚本里不再手动传固定的 `--rtc-execute-horizon` 或 `--rtc-inference-delay`。这两个量都由真实控制循环和策略服务耗时决定。
+
+```bash
+cd <openpi_repo>
+conda activate piper-openpi
+
+python examples/piper/main_rtc.py \
+  --host=127.0.0.1 \
+  --port=8000 \
+  --prompt="抓起书本放到另外一个格子里" \
+  --camera-backend=realsense \
+  --head-camera-serial=339322074804 \
+  --wrist-camera-serial=346522074547 \
+  --show-cameras \
+  --camera-preview-window="Piper cameras" \
+  --camera-preview-scale=1.2 \
+  --can-name=can_right \
+  --control-hz=15 \
+  --move-speed-percent=30 \
+  --gripper-open-mm=70.0 \
+  --gripper-closed-mm=0.0 \
+  --gripper-threshold-mm=35.0 \
+  --no-dry-run \
+  --enable-robot
+```
+
+运行日志会打印每次新 chunk 接入时的动态延迟，例如：
+
+```text
+RTC accepted chunk at step 42: delay_steps=3 elapsed_ms=185.7 server_timing={'infer_ms': 170.2}
+```
+
+这里 `delay_steps=3` 表示这次策略服务推理期间，控制端已经实际发送了 3 个旧 chunk 动作，因此新 chunk 会从第 3 个动作开始接入。若策略服务太慢，导致返回时旧 chunk 已经用完，脚本会报错提示 inference 太慢。
+
 
 ## 3. 常用修改项
 

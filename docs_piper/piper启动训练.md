@@ -9,9 +9,9 @@ cd <openpi_repo>
 当前新机器的数据集和 checkpoint 根目录：
 
 ```text
-数据集：/mnt/c9dd2903-1a5c-4ec3-b146-9f8ee2434744/Dataset/piper_data/data
-LeRobot v2.1 noRGBD：/mnt/c9dd2903-1a5c-4ec3-b146-9f8ee2434744/Dataset/piper_data/data/lerobot_v21/piper_right_book_noRGBD
-checkpoint：/mnt/c9dd2903-1a5c-4ec3-b146-9f8ee2434744/checkpoints/openpi
+数据集：/mnt/disk/Dataset/piper_data/data
+LeRobot v2.1 noRGBD：/mnt/disk/Dataset/piper_data/data/lerobot_v21/piper_right_book_noRGBD
+checkpoint：/mnt/disk/checkpoints/openpi
 ```
 
 ## 推荐配置
@@ -82,7 +82,7 @@ pgrep -af "scripts/train.py pi05_piper_right_book_noRGBD_lora_joint_delta_grippe
 checkpoint 输出位置：
 
 ```text
-/mnt/c9dd2903-1a5c-4ec3-b146-9f8ee2434744/checkpoints/openpi/pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute/piper_right_book_noRGBD_joint_delta_gripper_absolute_bs32
+/mnt/disk/checkpoints/openpi/pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute/piper_right_book_noRGBD_joint_delta_gripper_absolute_bs32
 ```
 
 ## 4. 恢复或停止
