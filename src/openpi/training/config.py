@@ -34,9 +34,11 @@ ModelType: TypeAlias = _model.ModelType
 # Work around a tyro issue with using nnx.filterlib.Filter directly.
 Filter: TypeAlias = nnx.filterlib.Filter
 
-PIPER_DATA_ROOT = "/mnt/c9dd2903-1a5c-4ec3-b146-9f8ee2434744/Dataset/piper_data/data"
-PIPER_CHECKPOINT_ROOT = "/mnt/c9dd2903-1a5c-4ec3-b146-9f8ee2434744/checkpoints/openpi"
+PIPER_DATA_ROOT = "/mnt/disk/Dataset/piper_data/data"
+PIPER_CHECKPOINT_ROOT = "/mnt/disk/checkpoints/openpi"
 PIPER_LEROBOT_NO_RGBD_DATASET = f"{PIPER_DATA_ROOT}/lerobot_v21/piper_right_book_noRGBD"
+PIPER_LEROBOT_NO_RGBD_RGBD_MERGED_DATASET = f"{PIPER_DATA_ROOT}/lerobot_v21/piper_right_book_noRGBD_RGBD_merged"
+PIPER_LEROBOT_RGBD_V1_FIXED_DATASET = f"{PIPER_DATA_ROOT}/lerobot_v21/piper_right_book_RGBD_V1_fixed"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -977,6 +979,20 @@ _CONFIGS = [
         batch_size=32,
     ),
     #
+    # ALOHA Sim configs. This config is used to demonstrate how to train on a simple simulated environment.
+    #
+    TrainConfig(
+        name="pi0_aloha_sim",
+        model=pi0_config.Pi0Config(),
+        data=LeRobotAlohaDataConfig(
+            repo_id="lerobot/aloha_sim_transfer_cube_human",
+            default_prompt="Transfer cube",
+            use_delta_joint_actions=False,
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=20_000,
+    ),
+    #
     # Fine-tuning Piper configs.
     #
     TrainConfig(
@@ -1103,19 +1119,67 @@ _CONFIGS = [
         batch_size=32,
         num_workers=4,
     ),
-    #
-    # ALOHA Sim configs. This config is used to demonstrate how to train on a simple simulated environment.
-    #
     TrainConfig(
-        name="pi0_aloha_sim",
-        model=pi0_config.Pi0Config(),
-        data=LeRobotAlohaDataConfig(
-            repo_id="lerobot/aloha_sim_transfer_cube_human",
-            default_prompt="Transfer cube",
-            use_delta_joint_actions=False,
+        name="pi05_piper_right_book_noRGBD_RGBD_lora_joint_delta_gripper_absolute",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,
+            action_horizon=30,
+            paligemma_variant="gemma_2b_lora",
+            action_expert_variant="gemma_300m_lora",
         ),
-        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
-        num_train_steps=20_000,
+        data=LeRobotPiperDataConfig(
+            repo_id=PIPER_LEROBOT_NO_RGBD_RGBD_MERGED_DATASET,
+            base_config=DataConfig(prompt_from_task=True, action_delta_timestamps_start=1),
+            assets=AssetsConfig(asset_id="piper_right_book_noRGBD_RGBD_joint_delta_gripper_absolute"),
+            binarize_gripper_outputs=False,
+            delta_gripper_action=False,
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        freeze_filter=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,
+            action_horizon=30,
+            paligemma_variant="gemma_2b_lora",
+            action_expert_variant="gemma_300m_lora",
+        ).get_freeze_filter(),
+        ema_decay=None,
+        num_train_steps=30_000,
+        save_interval=5_000,
+        keep_period=5_000,
+        batch_size=32,
+        num_workers=4,
+    ),
+    TrainConfig(
+        name="pi05_piper_right_book_RGBD_V1_fixed_lora_joint_delta_gripper_absolute",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,
+            action_horizon=30,
+            paligemma_variant="gemma_2b_lora",
+            action_expert_variant="gemma_300m_lora",
+        ),
+        data=LeRobotPiperDataConfig(
+            repo_id=PIPER_LEROBOT_RGBD_V1_FIXED_DATASET,
+            base_config=DataConfig(prompt_from_task=True, action_delta_timestamps_start=1),
+            assets=AssetsConfig(asset_id="piper_right_book_RGBD_V1_fixed_joint_delta_gripper_absolute"),
+            binarize_gripper_outputs=False,
+            delta_gripper_action=False,
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        freeze_filter=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,
+            action_horizon=30,
+            paligemma_variant="gemma_2b_lora",
+            action_expert_variant="gemma_300m_lora",
+        ).get_freeze_filter(),
+        ema_decay=None,
+        num_train_steps=30_000,
+        save_interval=5_000,
+        keep_period=5_000,
+        batch_size=32,
+        num_workers=4,
     ),
     #
     # Debugging configs.

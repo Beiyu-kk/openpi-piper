@@ -11,6 +11,7 @@
 - `pi05_piper_right_book_v5_lora`：`action_horizon=15`
 - `pi05_piper_right_book_v5_lora_all_delta`：`action_horizon=15`
 - `pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute`：`action_horizon=30`
+- `pi05_piper_right_book_noRGBD_RGBD_lora_joint_delta_gripper_absolute`：`action_horizon=30`
 
 所以控制端命令里不需要额外传模型动作块大小。只要服务端的 `--policy.config` 和 `--policy.dir` 对应正确 checkpoint，控制端会自动适配 15 或 30 的返回动作块。
 
@@ -36,7 +37,24 @@
 
 当前迁移盘没有找到这个旧实验的 checkpoint 目录。新机器上直接部署请使用 1.3 的推荐模型。
 
-## 1.3 启动模型推理服务 pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute
+## 1.3 启动模型推理服务 pi05_piper_right_book_noRGBD_RGBD_lora_joint_delta_gripper_absolute
+
+该配置使用 noRGBD LeRobot 数据集和 RGBD_V1_fixed 转换出的 RGB-only LeRobot 数据共同训练，动作定义仍然是前六维关节相对位置 + 第七维夹爪绝对位置，`action_horizon=30`。
+
+把 `--policy.dir` 最后的 step 改成实际要部署的 checkpoint，例如 `5000`、`10000` 或 `30000`：
+
+```bash
+cd <openpi_repo>
+source .venv/bin/activate
+
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 .venv/bin/python scripts/serve_policy.py \
+  --port=8000 \
+  policy:checkpoint \
+  --policy.config=pi05_piper_right_book_noRGBD_RGBD_lora_joint_delta_gripper_absolute \
+  --policy.dir=/mnt//checkpoints/openpi/pi05_piper_right_book_noRGBD_RGBD_lora_joint_delta_gripper_absolute/piper_right_book_noRGBD_RGBD_joint_delta_gripper_absolute_bs32/5000
+```
+
+## 1.4 旧模型推理服务 pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute
 
 该配置是前六维关节相对位置 + 第七维夹爪绝对位置，norm stats计算使用的是相对位置，并通过 `action_delta_timestamps_start=1` 避开 `action_t == state_t` 的首帧问题。该模型的 `action_horizon=30`，控制端会从服务端 metadata 自动识别，不需要额外传动作块大小。
 
@@ -44,11 +62,11 @@
 cd <openpi_repo>
 source .venv/bin/activate
 
-XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run --no-dev scripts/serve_policy.py \
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 .venv/bin/python scripts/serve_policy.py \
   --port=8000 \
   policy:checkpoint \
   --policy.config=pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute \
-  --policy.dir=/mnt/c9dd2903-1a5c-4ec3-b146-9f8ee2434744/checkpoints/openpi/pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute/piper_right_book_noRGBD_joint_delta_gripper_absolute_bs32/5000
+  --policy.dir=/mnt/disk/checkpoints/openpi/pi05_piper_right_book_noRGBD_lora_joint_delta_gripper_absolute/piper_right_book_noRGBD_joint_delta_gripper_absolute_bs32/5000
 ```
 
 ## 2. 真机启动

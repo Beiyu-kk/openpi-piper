@@ -2,6 +2,7 @@ import dataclasses
 
 from openpi import transforms
 from openpi.models import pi0_config
+from openpi.policies import piper_policy
 from openpi.training import config as training_config
 
 
@@ -15,6 +16,12 @@ def _piper_delta_and_absolute_masks(data_config):
         if isinstance(transform, transforms.AbsoluteActions)
     ]
     return delta_transforms[-1].mask, absolute_transforms[0].mask
+
+
+def _piper_outputs(data_config):
+    return next(
+        transform for transform in data_config.data_transforms.outputs if isinstance(transform, piper_policy.PiperOutputs)
+    )
 
 
 def test_piper_config_keeps_gripper_absolute_for_existing_checkpoints(tmp_path):
@@ -68,3 +75,40 @@ def test_piper_no_rgbd_train_config_uses_new_dataset_and_keeps_gripper_absolute(
     assert delta_mask == transforms.make_bool_mask(6, -1)
     assert absolute_mask == transforms.make_bool_mask(6, -1)
     assert data_config.action_delta_timestamps_start == 1
+
+
+def test_piper_no_rgbd_rgbd_merged_train_config_uses_merged_dataset_and_pi05_base(tmp_path):
+    config = training_config.get_config("pi05_piper_right_book_noRGBD_RGBD_lora_joint_delta_gripper_absolute")
+    config = dataclasses.replace(config, assets_base_dir=str(tmp_path))
+    data_config = config.data.create(config.assets_dirs, config.model)
+
+    delta_mask, absolute_mask = _piper_delta_and_absolute_masks(data_config)
+
+    assert config.data.repo_id == training_config.PIPER_LEROBOT_NO_RGBD_RGBD_MERGED_DATASET
+    assert "pi05_base/params" in config.weight_loader.params_path
+    assert config.batch_size == 32
+    assert config.model.action_horizon == 30
+    assert data_config.asset_id == "piper_right_book_noRGBD_RGBD_joint_delta_gripper_absolute"
+    assert delta_mask == transforms.make_bool_mask(6, -1)
+    assert absolute_mask == transforms.make_bool_mask(6, -1)
+    assert data_config.action_delta_timestamps_start == 1
+
+
+def test_piper_rgbd_v1_fixed_train_config_uses_single_dataset_and_continuous_absolute_gripper(tmp_path):
+    config = training_config.get_config("pi05_piper_right_book_RGBD_V1_fixed_lora_joint_delta_gripper_absolute")
+    config = dataclasses.replace(config, assets_base_dir=str(tmp_path))
+    data_config = config.data.create(config.assets_dirs, config.model)
+
+    delta_mask, absolute_mask = _piper_delta_and_absolute_masks(data_config)
+    piper_outputs = _piper_outputs(data_config)
+
+    assert config.data.repo_id == training_config.PIPER_LEROBOT_RGBD_V1_FIXED_DATASET
+    assert "pi05_base/params" in config.weight_loader.params_path
+    assert config.batch_size == 32
+    assert config.num_workers == 4
+    assert config.model.action_horizon == 30
+    assert data_config.asset_id == "piper_right_book_RGBD_V1_fixed_joint_delta_gripper_absolute"
+    assert delta_mask == transforms.make_bool_mask(6, -1)
+    assert absolute_mask == transforms.make_bool_mask(6, -1)
+    assert data_config.action_delta_timestamps_start == 1
+    assert piper_outputs.binarize_gripper is False
